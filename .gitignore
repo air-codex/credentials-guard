@@ -12,3 +12,7 @@
 #credentials/scan-log.txt
 
 #.env
+
+# Banner assets (design files, not for production)
+docs/assets/*.html
+docs/assets/*.css

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-06-17
+
+### Added
+- External scan script (`scan-external.sh`) for auditing other projects without leaving residues
+- Reports saved to `credentials/reports/` without creating files in target directory
+- VibeGuard contribution files in `vibeguard-contribution/`
+
+### Changed
+- Updated `.gitignore` to exclude banner design assets (`docs/assets/*.html`, `docs/assets/*.css`)
+
 ## [0.1.0] - 2026-06-16
 
 ### Added

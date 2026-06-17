@@ -50,9 +50,25 @@ Bypass is logged in `credentials/scan-log.txt`.
 
 # Scan full project
 ./scripts/scan-full-project.sh
+
+# Scan external project (no residues in target)
+./scripts/scan-external.sh /path/to/project
+./scripts/scan-external.sh /path/to/project /path/to/reports
 ```
 
 Reports are saved in `credentials/reports/` with date-based filenames.
+
+### External Scan
+
+The `scan-external.sh` script scans other projects without creating any files in the target directory. Reports are saved to a safe location (default: `credentials/reports/`).
+
+```bash
+# Scan another project
+./scripts/scan-external.sh /path/to/other-project
+
+# Save reports to specific location
+./scripts/scan-external.sh /path/to/other-project /tmp/scan-reports
+```
 
 ## Setup for New Team Members
 
