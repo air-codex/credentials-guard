@@ -1,0 +1,14 @@
+# credential-guard
+
+# Uncomment these lines when using credential-guard in your project:
+#
+# Credentials folder (patterns, reports, keys, tokens)
+#credentials/
+#
+# Bypass file
+#credentials/bypass-scan
+#
+# Scan log
+#credentials/scan-log.txt
+
+#.env

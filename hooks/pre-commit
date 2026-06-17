@@ -1,0 +1,148 @@
+CREDENTIALS_DIR="credentials"
+REPORTS_DIR="credentials/reports"
+REPORT_FILE="$REPORTS_DIR/pre-commit-$(date -u +%Y%m%d-%H%M%S).md"
+BYPASS_FILE="$CREDENTIALS_DIR/bypass-scan"
+echo "Running credential scan..."
+if [ -f "$BYPASS_FILE" ]; then
+  mkdir -p "$CREDENTIALS_DIR" "$REPORTS_DIR"
+  echo "# Pre-commit Credential Scan" > "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo "- **Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$REPORT_FILE"
+  echo "- **Project**: $(basename $(git rev-parse --show-toplevel))" >> "$REPORT_FILE"
+  echo "- **Branch**: $(git branch --show-current)" >> "$REPORT_FILE"
+  echo "- **Scope**: Staged files only" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo "## Status: BYPASS" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo "Scan was bypassed by user." >> "$REPORT_FILE"
+  rm "$BYPASS_FILE"
+  echo "BYPASS: Scan skipped (bypass file exists)"
+  echo "Report: $REPORT_FILE"
+  exit 0
+fi
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -z "$STAGED_FILES" ]; then
+  echo "No staged files. Skipping scan."
+  exit 0
+fi
+for f in $STAGED_FILES; do
+  case "$f" in
+    .env|.env.*|.mcp.json|*credentials*|*secrets*|*.pem|*.key)
+      mkdir -p "$CREDENTIALS_DIR" "$REPORTS_DIR"
+      echo "# Pre-commit Credential Scan" > "$REPORT_FILE"
+      echo "" >> "$REPORT_FILE"
+      echo "- **Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$REPORT_FILE"
+      echo "- **Project**: $(basename $(git rev-parse --show-toplevel))" >> "$REPORT_FILE"
+      echo "- **Branch**: $(git branch --show-current)" >> "$REPORT_FILE"
+      echo "- **Scope**: Staged files only" >> "$REPORT_FILE"
+      echo "" >> "$REPORT_FILE"
+      echo "## Status: BLOCKED — SENSITIVE FILE" >> "$REPORT_FILE"
+      echo "" >> "$REPORT_FILE"
+      echo "### Blocked file" >> "$REPORT_FILE"
+      echo "" >> "$REPORT_FILE"
+      echo "- [$f](../../$f)" >> "$REPORT_FILE"
+      echo "" >> "$REPORT_FILE"
+      echo "### Fix" >> "$REPORT_FILE"
+      echo "" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+      echo "git reset HEAD $f" >> "$REPORT_FILE"
+      echo "echo '$f' >> .gitignore" >> "$REPORT_FILE"
+      echo '```' >> "$REPORT_FILE"
+      echo ""
+      echo "=========================================="
+      echo "  SENSITIVE FILE DETECTED — COMMIT BLOCKED"
+      echo "=========================================="
+      echo ""
+      echo "File: $f"
+      echo "Report: $REPORT_FILE"
+      echo ""
+      exit 1
+      ;;
+  esac
+done
+DICT_FILE="credentials/credential-patterns.txt"
+if [ ! -f "$DICT_FILE" ]; then
+  echo "WARNING: Dictionary file not found at $DICT_FILE"
+  echo "Skipping credential scan."
+  exit 0
+fi
+PATTERNS_FILE=$(mktemp)
+awk '/^[[:space:]]*#/ {next} /^[[:space:]]*$/ {next} {sub(/^[[:space:]]+/,""); sub(/[[:space:]]+$/,""); print}' "$DICT_FILE" > "$PATTERNS_FILE"
+PATTERN_COUNT=$(wc -l < "$PATTERNS_FILE" | xargs)
+if [ "$PATTERN_COUNT" -eq 0 ]; then
+  echo "No patterns found in dictionary. Skipping scan."
+  rm "$PATTERNS_FILE"
+  exit 0
+fi
+HAS_LEAK=0
+LEAK_FILES=""
+LEAK_DETAILS=""
+for f in $STAGED_FILES; do
+  # Skip example files
+  case "$f" in
+    *.example.*|credential-patterns.example.*) continue ;;
+  esac
+  CONTENT=$(git show :"$f" 2>/dev/null)
+  if [ -z "$CONTENT" ]; then
+    continue
+  fi
+  MATCHES=$(echo "$CONTENT" | grep -nEf "$PATTERNS_FILE" 2>/dev/null)
+  if [ -n "$MATCHES" ]; then
+    HAS_LEAK=1
+    LEAK_FILES="$LEAK_FILES- [$f](../../$f)\n"
+    LEAK_DETAILS="$LEAK_DETAILS\n### [$f](../../$f)\n\`\`\`\n$MATCHES\n\`\`\`\n"
+  fi
+done
+rm "$PATTERNS_FILE"
+mkdir -p "$CREDENTIALS_DIR" "$REPORTS_DIR"
+echo "# Pre-commit Credential Scan" > "$REPORT_FILE"
+echo "" >> "$REPORT_FILE"
+echo "- **Date**: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$REPORT_FILE"
+echo "- **Project**: $(basename $(git rev-parse --show-toplevel))" >> "$REPORT_FILE"
+echo "- **Branch**: $(git branch --show-current)" >> "$REPORT_FILE"
+echo "- **Scope**: Staged files only" >> "$REPORT_FILE"
+echo "- **Patterns**: $PATTERN_COUNT" >> "$REPORT_FILE"
+echo "" >> "$REPORT_FILE"
+if [ "$HAS_LEAK" -eq 1 ]; then
+  echo "## Status: BLOCKED" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo "### Scanned files" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  for f in $STAGED_FILES; do
+    echo "- $f" >> "$REPORT_FILE"
+  done
+  echo "" >> "$REPORT_FILE"
+  echo "### Files with leaks" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo -e "$LEAK_FILES" >> "$REPORT_FILE"
+  echo "### Details" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo -e "$LEAK_DETAILS" >> "$REPORT_FILE"
+  echo "### Bypass options" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo '```' >> "$REPORT_FILE"
+  echo "touch $BYPASS_FILE" >> "$REPORT_FILE"
+  echo "git commit" >> "$REPORT_FILE"
+  echo '```' >> "$REPORT_FILE"
+  echo ""
+  echo "=========================================="
+  echo "  CREDENTIAL LEAK DETECTED — COMMIT BLOCKED"
+  echo "=========================================="
+  echo ""
+  echo "Report: $REPORT_FILE"
+  echo "Bypass: touch $BYPASS_FILE && git commit"
+  echo ""
+  exit 1
+else
+  echo "## Status: PASS" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  echo "### Scanned files" >> "$REPORT_FILE"
+  echo "" >> "$REPORT_FILE"
+  for f in $STAGED_FILES; do
+    echo "- $f" >> "$REPORT_FILE"
+  done
+  echo "" >> "$REPORT_FILE"
+  echo "No credential leaks detected." >> "$REPORT_FILE"
+  echo "Credential scan: PASS"
+  exit 0
+fi
