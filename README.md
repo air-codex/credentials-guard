@@ -255,6 +255,7 @@ newprovider_[a-zA-Z0-9]{20,}
 | `scripts/scan-unstaged.sh` | Scan modified but not staged files | Before `git add` |
 | `scripts/scan-staged.sh` | Scan staged files | After `git add`, before commit |
 | `scripts/scan-full-project.sh` | Scan ALL tracked files | Periodic audit, after install |
+| `scripts/scan-external.sh` | Scan another project (no residues) | Auditing external code |
 | `scripts/check-install.sh` | Verify installation is working | After install, troubleshooting |
 | `scripts/security-score.sh` | Rate project security (A-F) | Check security posture |
 | `scripts/stats.sh` | Scan statistics and bypass audit | Review activity |
